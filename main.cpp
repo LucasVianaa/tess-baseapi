@@ -186,7 +186,7 @@ int main(int argc, char* argv[])
     pars_values.push_back("0");
     pars_values.push_back("0");
     */
-   std::string outFile = std::string(argv[2]) + ".xml";
+   std::string outFile = std::string(argv[2]);
    std::ofstream ofs;
    ofs.open(outFile, std::ofstream::out | std::ofstream::trunc);
    ofs.close();
@@ -482,7 +482,7 @@ int main(int argc, char* argv[])
 
     const std::string &text = hocr_str.str();
     
-    outFile = std::string(argv[2]) + ".xml";
+    outFile = std::string(argv[2]);
     ofstream myfile;
     myfile.open(outFile);
     myfile << hocr_str.str();

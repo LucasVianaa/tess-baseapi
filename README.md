@@ -7,4 +7,4 @@
 
 # Execução 
 sudo ./program path/to/input/filename path/to/output/filename legacy <br>
-(OBS: arquivo de entrada deve ser ./png e o arquivo de saída não deve conter a extensão)
+(OBS: arquivo de entrada deve ser .png)
