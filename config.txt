@@ -1,0 +1,5 @@
+user_defined_dpi 300
+textord_tablefind_recognize_tables T
+hocr_font_info T
+hocr_char_boxes T
+lstm_choice_mode 2

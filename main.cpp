@@ -153,18 +153,70 @@ std::string nameOfType(int type){
       break;
     }
 }
+tesseract::PageSegMode getPSM(int psm){
+  
+  switch (psm)
+  {
+  case 0:
+    return tesseract::PSM_OSD_ONLY;
+    break;
+  case 1:
+    return tesseract::PSM_AUTO_OSD;
+    break;
+  case 2:
+    return tesseract::PSM_AUTO_ONLY;
+    break;
+  case 3:
+    return tesseract::PSM_AUTO;
+    break;
+  case 4:
+    return tesseract::PSM_SINGLE_COLUMN;
+    break;
+  case 5:
+    return tesseract::PSM_SINGLE_BLOCK_VERT_TEXT;
+    break;
+  case 6:
+    return tesseract::PSM_SINGLE_BLOCK;
+    break;
+  case 7:
+    return tesseract::PSM_SINGLE_LINE;
+    break;
+  case 8:
+    return tesseract::PSM_SINGLE_WORD;
+    break;
+  case 9:
+    return tesseract::PSM_CIRCLE_WORD;
+    break;
+  case 10:
+    return tesseract::PSM_SINGLE_CHAR;
+    break;
+  case 11:
+    return tesseract::PSM_SPARSE_TEXT;
+    break;
+  case 12:
+    return tesseract::PSM_SPARSE_TEXT_OSD;
+    break;
+  case 13:
+    return tesseract::PSM_RAW_LINE;
+    break;
+  
+  default:
+    break;
+  }
+  return tesseract::PSM_AUTO;
+}
 
 //Compilação
 //(Opção 1 | Instalação padrão do tesseract) sudo g++ -o program main.cpp -llept -ltesseract
 //(Opção 2 | Tesseract compilado) sudo g++ -o program main.cpp -I/usr/local/include/tesseract -L/usr/local/lib -llept -ltesseract
 
 
-//Execução: sudo ./program path/to/input/filename path/to/output/filename legacy 
-//(OBS: arquivo de entrada deve ser ./png e o arquivo de saída não deve conter a extensão)
+//Execução: sudo ./program teste.png teste.xml lstm config.txt 3 por+eng
+//(OBS: arquivo de entrada deve ser uma imagem)
 int main(int argc, char* argv[])
 {
-  if (argc < 4) {
-        std::cerr << "Usage: " << argv[0] << " PATH/TO/INPUT/FILENAME(no extension)" << " /PATH/TO/OUTPUT/FILENAME(no extension)" << " MODE(LSTM or Legacy)" <<std::endl;
+    if (argc < 7) {
+        std::cerr << "Usage: " << argv[0] << " PATH/TO/INPUT/FILENAME" << " /PATH/TO/OUTPUT/FILENAME" << " MODE(LSTM or Legacy)" << " PATH/TO/CONFIG/FILENAME" << " PSM(number)" << " Languages" << endl;
         return 1;
     }
    /*
@@ -192,21 +244,17 @@ int main(int argc, char* argv[])
    ofs.close();
    tesseract::TessBaseAPI *api = new tesseract::TessBaseAPI();
    if(strcmp(argv[3], "legacy") == 0){
-     if (api->Init(NULL, "por+eng", tesseract::OcrEngineMode::OEM_TESSERACT_ONLY)) {
+     if (api->Init(NULL, argv[6], tesseract::OcrEngineMode::OEM_TESSERACT_ONLY)) {
         fprintf(stderr, "Could not initialize tesseract.\n");
         exit(1);
     }
    }else{
-     if (api->Init(NULL, "por+eng", tesseract::OcrEngineMode::OEM_LSTM_ONLY)) {
+     if (api->Init(NULL, argv[6], tesseract::OcrEngineMode::OEM_LSTM_ONLY)) {
         fprintf(stderr, "Could not initialize tesseract.\n");
         exit(1);
     }
    }
-    api->SetVariable("user_defined_dpi", "300");
-    api->SetVariable("textord_tablefind_recognize_tables", "true");
-    api->SetVariable("hocr_font_info", "true");
-    api->SetVariable("hocr_char_boxes", "true");
-    api->SetVariable("lstm_choice_mode", "2");
+   api->ReadConfigFile(argv[4]);
     int lcnt = 1, bcnt = 1, pcnt = 1, wcnt = 1, scnt = 1, tcnt = 1, ccnt = 1;
     int page_id = 1; // hOCR uses 1-based page numbers.
     bool para_is_ltr = true;       // Default direction is LTR
@@ -219,7 +267,7 @@ int main(int argc, char* argv[])
     std::string img = std::string(argv[1]);
     // Open input image with leptonica library
     Pix *image = pixRead(img.c_str());
-    api->SetPageSegMode(tesseract::PSM_AUTO);
+    api->SetPageSegMode(getPSM(std::stoi(argv[5])));
     api->SetImage(image);
     char* outFull = api->GetUTF8Text();
 
@@ -244,7 +292,7 @@ int main(int argc, char* argv[])
     hocr_str << "  <div class='ocr_page'";
     hocr_str << " id='"
             << "page_" << page_id << "'";
-    hocr_str << " title='image \"" + std::string(argv[1]) + ".png" + "\"'>\n";
+    hocr_str << " title='image \"" + std::string(argv[1]) + "\"'>\n";
         
     std::unique_ptr<tesseract::ResultIterator> ri(api->GetIterator());
     if(ri != 0){
@@ -352,11 +400,10 @@ int main(int argc, char* argv[])
           ri->BoundingBox(tesseract::RIL_SYMBOL, &left, &top, &right, &bottom);
           hocr_str << "\n       <span class='ocrx_symbol' title='x_bboxes " << left << " " << top
                    << " " << right << " " << bottom << "; x_conf " << ri->Confidence(tesseract::RIL_SYMBOL)
-                   << "'>";
+                   << "' text='" << HOcrEscape(grapheme.get()).c_str() << "'>";
         }
-        hocr_str << HOcrEscape(grapheme.get()).c_str();
         if (hocr_boxes) {
-          hocr_str << "</span>";
+          
           tesseract::ChoiceIterator ci(*ri);
           if (ci.Timesteps() != nullptr) {
             std::vector<std::vector<std::pair<const char *, float>>> *symbol = ci.Timesteps();
@@ -402,57 +449,11 @@ int main(int argc, char* argv[])
             tcnt++;
           }
         }
+        hocr_str << "\n       </span>";
       }
       ri->Next(tesseract::RIL_SYMBOL);
     } while (!ri->Empty(tesseract::RIL_BLOCK) && !ri->IsAtBeginningOf(tesseract::RIL_WORD));
-    // If the lstm choice mode is required it is added here
-    if (lstm_choice_mode == 1 && !hocr_boxes && rawTimestepMap != nullptr) {
-      for (auto symbol : *rawTimestepMap) {
-        hocr_str << "\n       <span class='ocr_symbol'"
-                 << " id='"
-                 << "symbol_" << page_id << "_" << wcnt << "_" << scnt << "'>";
-        for (auto timestep : symbol) {
-          hocr_str << "\n        <span class='ocrx_cinfo'"
-                   << " id='"
-                   << "timestep" << page_id << "_" << wcnt << "_" << tcnt << "'>";
-          for (auto conf : timestep) {
-            hocr_str << "\n         <span class='ocrx_cinfo'"
-                     << " id='"
-                     << "choice_" << page_id << "_" << wcnt << "_" << ccnt << "'"
-                     << " title='x_confs " << int(conf.second * 100) << "'>"
-                     << HOcrEscape(conf.first).c_str() << "</span>";
-            ++ccnt;
-          }
-          hocr_str << "</span>";
-          ++tcnt;
-        }
-        hocr_str << "</span>";
-        ++scnt;
-      }
-    } else if (lstm_choice_mode == 2 && !hocr_boxes && CTCMap != nullptr) {
-      for (auto timestep : *CTCMap) {
-        if (timestep.size() > 0) {
-          hocr_str << "\n       <span class='ocrx_choices'"
-                   << " id='"
-                   << "lstm_choices_" << page_id << "_" << wcnt << "_" << tcnt << "'>";
-          for (auto &j : timestep) {
-            float conf = 100 - 5 * j.second;
-            if (conf < 0.0f)
-              conf = 0.0f;
-            if (conf > 100.0f)
-              conf = 100.0f;
-            hocr_str << "\n        <span class='ocrx_choice'"
-                     << " id='"
-                     << "choice_" << page_id << "_" << wcnt << "_" << ccnt << "'"
-                     << " title='x_confs " << conf << "'>" << HOcrEscape(j.first).c_str()
-                     << "</span>";
-            ccnt++;
-          }
-          hocr_str << "</span>";
-          tcnt++;
-        }
-      }
-    }
+    
     // Close ocrx_word.
     if (hocr_boxes || lstm_choice_mode > 0) {
       hocr_str << "\n      ";
